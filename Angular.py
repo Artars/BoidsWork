@@ -2,7 +2,7 @@
 """
 Created on Fri Apr 29 15:09:23 2016
 
-@author: arsart and Buu
+@author: arsart and buu
 """
 import numpy as np
 from scipy.spatial.distance import pdist, squareform
@@ -25,12 +25,13 @@ class ParticleBox:
     def __init__(self,
                  init_state = [[1, 0, 0, 0],
                                [-0.5, 0.5, 0, 0],
-                               [-0.5, -0.5, -0.5, 0.5]],#3 particles [x0, y0, Vx, Vy,ax,ay]
-                 bounds = [-100, 100, -100, 100], # size of the box [xmin, xmax, ymin, ymax]
+                               [-0.5, -0.5, -0.5, 0.5]],
+                 # size of the box [xmin, xmax, ymin, ymax]                 
+                 bounds = [-100, 100, -100, 100],
                  size = 1,
                  maxvel = 5,
                  repulsionRange = 1,
-                 orientationRange =1,
+                 orientationRange =8,
                  wallRange = .5,
                  wallRepulsion = 20,
                  k = .5):
@@ -51,29 +52,38 @@ class ParticleBox:
     def step(self, dt):
         """step once by dt seconds"""
         self.time_elapsed += dt
+        #U is the total force aplied on each particles
+        #It has 3 components: a(atraction), o(orientation), r(repulsion)
         U = np.zeros((self.state.shape[0], 2), dtype=float)
         Ur = np.zeros((self.state.shape[0], 2), dtype=float)
         Uo = np.zeros((self.state.shape[0], 2), dtype=float)
         Ua = np.zeros((self.state.shape[0], 2), dtype=float)
-        # find pairs of particles undergoing a collision
-        D = squareform(pdist(self.state[:, 0:2]))#calculate the distance betwen all the particles
+        
+        #calculate the distance betwen all the particles
+        D = squareform(pdist(self.state[:, 0:2]))
+        
         #Calculate U
         for i in range (self.state.shape[0]):
             #Sum of Velocities of neighbours
             velSum = np.zeros(2, dtype=float)
+            #Sum of the distance of all particles
             distSum = np.zeros(2, dtype = float)
             
             for j in range (self.state.shape[0]):
                 if (i != j):
+                    #Ur calculation
                     if D[i][j] < self.repulsionRange:
                         Ur[i] += (self.state[j,:2] - self.state[i,:2])/ (D[i][j]**2)
+                    #Uo sum
                     if D[i][j] < self.orientationRange:
                         velSum += (np.cos(self.state[j,2]),np.sin(self.state[j,2]))
+                    #Ua sum
                     distSum += self.state[j,:2] - self.state[i,:2] 
             
             Uo[i] += ((np.cos(self.state[i,2]),np.sin(self.state[i,2])) + velSum )
-            Uo[i] = Uo[i] / np.linalg.norm(Uo[i])
             
+            #Normaliza Uo and Ua            
+            Uo[i] = Uo[i] / np.linalg.norm(Uo[i])
             Ua[i] = distSum / np.linalg.norm(distSum)
             Ur[i] *= -1
         
@@ -83,7 +93,7 @@ class ParticleBox:
         crossed_y1 = (self.state[:, 1] < self.bounds[2] + self.size+self.wallRange)
         crossed_y2 = (self.state[:, 1] > self.bounds[3] - self.size-self.wallRange)
         
-        
+        #Aplying forces to contain particles inside bounds (Using repulsion similar)
         for i in range (self.state.shape[0]):
             if (crossed_x1[i]):
                 dif = (self.state[i,0] - self.bounds[0])
@@ -108,33 +118,18 @@ class ParticleBox:
                 if (dif < 0):
                     dif = .000001
                 Ur[i] += (0, -dif / (dif**2))
-        """        
-        Ur[crossed_x1] += ((self.wallRepulsion)/(self.wallRange**2), 0)
-        Ur[crossed_x2] -= ((self.wallRepulsion)/(self.wallRange**2), 0)
         
-        Ur[crossed_y1] += (0, (self.wallRepulsion)/(self.wallRange**2))
-        Ur[crossed_y2] -= (0, (self.wallRepulsion)/(self.wallRange**2))
-        """
-        
-        """
-        self.state[crossed_x1, 0] = self.bounds[1] - 2 * self.wallRange
-        self.state[crossed_x2, 0] = self.bounds[0] + 2 * self.wallRange
-        self.state[crossed_y1, 1] = self.bounds[3] - 2 * self.wallRange
-        self.state[crossed_y2, 1] = self.bounds[2] + 2 * self.wallRange"""
-        
-        #Update Angular speed        
+        #Sum forces components  
         U[:] = Ur[:] + Uo[:] + Ua[:]
         
-        #Heading Error calculation and fix
-        #headingError = np.zeros(self.state.shape[0])
-        #for i in range(self.state.shape[0]):
-        #    headingError[i] = math.atan2(U[i,1],U[i,0]) - self.state[i,2]
+        #Heading calculation and fix
         headingError = np.arctan2(U[:,1],U[:,0]) - self.state[:,2]
         lowerAngleFix = (headingError[:] < -np.pi)
-        headingError[lowerAngleFix] = 2 * np.pi + headingError[lowerAngleFix]
         higherAngleFix = (headingError[:] > np.pi)
+        headingError[lowerAngleFix] = 2 * np.pi + headingError[lowerAngleFix]
         headingError[higherAngleFix] += -2 * np.pi
         
+        #Update angular speed
         self.state[:,3] = self.k * headingError[:]              
         
         #Update positions
@@ -167,7 +162,6 @@ ax = fig.add_subplot(111, aspect='equal', autoscale_on=False,
 
 # particles holds the locations of the particles
 particles, = ax.plot([], [], 'bo', ms=6)
-headings, = ax.plot([], [], 'b', ms=6)
 # rect is the box edge
 rect = plt.Rectangle(box.bounds[::2],
                      box.bounds[1] - box.bounds[0],
@@ -177,35 +171,23 @@ ax.add_patch(rect)
 
 def init():
     """initialize animation"""
-    global box, rect, headings
+    global box, rect
     particles.set_data([], [])
-    #headings.set_data([], [])
     rect.set_edgecolor('none')
-    return particles, rect, headings
+    return particles, rect
 
 def animate(i):
     """perform animation step"""
-    global box, rect, dt, ax, fig, headings
+    global box, rect, dt, ax
     box.step(dt)
 
     ms = int(fig.dpi * 2 * box.size * fig.get_figwidth()
              / np.diff(ax.get_xbound())[0])
     
-    # update pieces of the animation
-    """call_list = []
-    for i in range(box.state.shape[0]):
-        call_list.append( (box.state[i, 0], (box.state[i,0] + np.cos(box.state[i,2]))) )
-        call_list.append( ((box.state[i, 1]), (box.state[i,1] + np.sin(box.state[i,2]))) )
-        call_list.append('-b')
-    call_list
-    li = np.asarray(call_list)
-    print li"""
     rect.set_edgecolor('k')
     particles.set_data(box.state[:, 0], box.state[:, 1])
-    #headings.set_data(li)
-    particles.set_markersize(3)
-    headings.set_markersize(ms)
-    return particles, rect, headings
+    particles.set_markersize(2)
+    return particles, rect
 
 ani = animation.FuncAnimation(fig, animate, frames=30,
                               interval=10, blit=True, init_func=init)

@@ -2,7 +2,7 @@
 """
 Created on Fri Apr 29 14:19:36 2016
 
-@author: buu
+@author: arsart and buu
 """
 
 import numpy as np
@@ -92,12 +92,11 @@ class ParticleBox:
         
         #Finish calculating the avarage of mass
         for i in range(len(avarageCalc)):
+            
             avarageCalc[i] = avarageCalc[i] / divisor[i]
          
         #Applying Coesion and Align forces
         alpha = np.ones(avarageCalc.shape[0])
-        
-        #alpha[:]*=math.atan2(1.,0.)-math.atan2(0.,1.)
         alpha[:]*=np.arctan2(self.state[:,3],self.state[:,2])-np.arctan2(avarageCalc[:,3],avarageCalc[:,2])#angulo do Vmedio para cada partícula
         maior=alpha[:]>math.pi
         menor=alpha[:]<-math.pi
@@ -105,12 +104,6 @@ class ParticleBox:
         alpha[menor]=2*math.pi +alpha[menor]
         alpha[:] *= self.alignment
         dF[:] += self.cohesion * (avarageCalc[:,:2] - self.state[:,:2])
-        
-        #Update do Amnésia
-        
-        #for i in range(len(self.state)):
-        #    self.state[i,2:] += dt * dF[i]
-        #    self.state[i,2:] *= 2./np.linalg.norm(self.state[i,2:])
         
         # check for crossing boundary               
         crossed_x1 = (self.state[:, 0] < self.bounds[0] + self.size+self.wallRange)
